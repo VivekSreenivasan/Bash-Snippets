@@ -5,9 +5,11 @@
 }
 
 @test "Check for latest version of bash-snippets on update" {
+  if [[ "$(uname)" == "Linux" ]];then
   run stocks update
   [ "$status" -eq 0 ]
   [ "$output" = "Bash-Snippets is already the latest version" ]
+fi
 }
 
 @test "The -h option should print usage" {
@@ -23,15 +25,14 @@
 }
 
 @test "Get stock info by passing in ticker" {
-  run stocks AAPL
-  [ "$status" -eq 0 ]
-  [ "${lines[0]}" = "AAPL stock info" ]
+  result=$( echo $(stocks AAPL) | grep -Eo "AAPL stock info" )
+  [ "$result" = "AAPL stock info" ]
+
 }
 
 @test "Get stock info by passing in company" {
-  run stocks Tesla
-  [ "$status" -eq 0 ]
-  [ "${lines[0]}" = "TSLA stock info" ]
+  result=$( echo $(stocks Apple) | grep -Eo "AAPL stock info" )
+  [ "$result" = "AAPL stock info" ]
 }
 
 @test "Get the tools version with -v" {

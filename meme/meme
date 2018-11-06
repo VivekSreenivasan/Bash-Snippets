@@ -1,18 +1,8 @@
 #!/usr/bin/env bash
-DELAY=1
-configuredClient=""
+# Author: Navan Chauhan https://github.com/navanchauhan
 currentVersion="1.22.1"
-
-checkOpenSSL()
-{
-  if  ! command -v openssl &>/dev/null; then
-    echo "Error: to use this tool openssl must be installed" >&2
-    return 1
-  else
-    return 0
-  fi
-}
-
+configuredClient=""
+fileName=""
 ## This function determines which http get tool the system has installed and returns an error if there isnt one
 getConfiguredClient()
 {
@@ -44,7 +34,7 @@ httpGet()
 update()
 {
   # Author: Alexander Epstein https://github.com/alexanderepstein
-  # Update utility version 2.2.0
+  # Update utility version 1.2.0
   # To test the tool enter in the defualt values that are in the examples for each variable
   repositoryName="Bash-Snippets" #Name of repostiory to be updated ex. Sandman-Lite
   githubUserName="alexanderepstein" #username that hosts the repostiory ex. alexanderepstein
@@ -65,11 +55,7 @@ update()
       if [[ "$answer" == [Yy] ]]; then
         cd ~ || { echo 'Update Failed'; exit 1; }
         if [[ -d  ~/$repositoryName ]]; then rm -r -f $repositoryName || { echo "Permissions Error: try running the update as sudo"; exit 1; } ; fi
-        echo -n "Downloading latest version of: $repositoryName."
-        git clone -q "https://github.com/$githubUserName/$repositoryName" && touch .BSnippetsHiddenFile || { echo "Failure!"; exit 1; } &
-        while [ ! -f .BSnippetsHiddenFile ]; do { echo -n "."; sleep 2; };done
-        rm -f .BSnippetsHiddenFile
-        echo "Success!"
+        git clone "https://github.com/$githubUserName/$repositoryName" || { echo "Couldn't download latest version"; exit 1; }
         cd $repositoryName || { echo 'Update Failed'; exit 1; }
         git checkout "v$latestVersion" 2> /dev/null || git checkout "$latestVersion" 2> /dev/null || echo "Couldn't git checkout to stable release, updating to latest commit."
         chmod a+x install.sh #this might be necessary in your case but wasnt in mine.
@@ -85,79 +71,60 @@ update()
   fi
 }
 
-usage()
-{
-  cat <<EOF
-Siteciphers
-Description: Checks the available ciphers for the SSL of an https site.
-Usage: siteciphers [flag] or siteciphers [optionalDFlag] [website]
-  -u  Update Bash-Snippet Tools
-  -h  Show the help
-  -v  Get the tool version
-  -d  Set the delay between requests sent to the site (default is 1 sec)
-Examples:
-  siteciphers github.com
-  siteciphers -d 0.5 github.com
-EOF
-}
-
 checkInternet()
 {
   httpGet github.com > /dev/null 2>&1 || { echo "Error: no active internet connection" >&2; return 1; } # query github with a get request
 }
 
-checkCiphers()
-{
-  ciphers=$(openssl ciphers 'ALL:eNULL' | sed -e 's/:/ /g') # grab all ciphers
-  SERVER=$1:443 # setup the connection server
-  for cipher in ${ciphers[*]}; do # for all possible ciphers
-    result=$(echo | openssl s_client -cipher "$cipher" -connect $SERVER 2>&1)
-    if [[ "$result" =~ ":error:" ]]; then
-      if [[ -z $2 ]]; then
-        error=$(echo -n $result | cut -d':' -f6)
-        echo "$cipher - NO ($error)"
-      fi
+main(){
+    echo -n "Enter the name for the meme's background (Ex. buzz, doge, blb ): "
+    read bg
+    echo -n "Enter the text for the first line: "
+    read raw_first
+    almost_first=$(echo "$raw_first" | awk '{print tolower($0)}')
+    first=$(echo "$almost_first" | sed -e 's/ /_/g')
+    echo -n "Enter the text for the second line: "
+    read raw_second
+    almost_second=$(echo "$raw_second" | awk '{print tolower($0)}')
+    second=$(echo "$almost_second" | sed -e 's/ /_/g')
+    if [ -z "$first" ]
+    then
+    first=$(echo "_")
     else
-      if [[ "$result" =~ "Cipher is $cipher" || "$result" =~ "Cipher    :" ]]; then
-        echo "$cipher - YES"
-      else
-        if [[ -z $2 ]]; then
-          echo "$cipher - UNKNOWN RESPONSE - $result"
-        fi
-      fi
+      echo ""
     fi
-    sleep $DELAY # sleep as to not overload the requests to the server
-  done
+    if [ -z "$second" ]
+    then
+    second=$(echo "_")
+    else
+      echo ""
+    fi
+    httpGet "https://memegen.link/$bg/$first/$second.jpg"  >> $fileName.png || return 1
+    return 0
 }
 
-checkOpenSSL || exit 1
-getConfiguredClient || exit 1
+usage()
+{
+  cat <<EOF
+Meme
+Description: A lightning fast meme generator
+Usage: tool [flags] or tool [flags] [arguments]
+  -u  Update Bash-Snippet Tools
+  -h  Show the help
+  -f  Choose the output filename
+  -v  Get the tool version
+Examples:
+   meme -h
+   meme -f dogeMeme
+EOF
+}
 
 
-if [[ $# == "0" ]]; then
-  usage
-  exit 1
-elif [[ $1 == "update" ]]; then
-  checkInternet || exit 1
-  update
-  exit 0
-elif [[ $1 == "help" ]]; then
-  usage
-  exit 0
-fi
 
-while getopts "huvd:" opt; do ## alows for using options in bash
+while getopts "uvhf:" opt; do
   case "$opt" in
     \?) echo "Invalid option: -$OPTARG" >&2
         exit 1
-        ;;
-    d)  #set the delay with the -d option
-        DELAY=$OPTARG
-        dFlag="1"
-        ;;
-    u)  checkInternet || exit 1
-        update
-        exit 0
         ;;
     h)  usage
         exit 0
@@ -165,16 +132,44 @@ while getopts "huvd:" opt; do ## alows for using options in bash
     v)  echo "Version $currentVersion"
         exit 0
         ;;
-    :)  ## will run when no arguments are provided to to d options
-        echo "Option -$OPTARG requires an argument." >&2
+    u)  getConfiguredClient || exit 1
+        checkInternet || exit 1
+        update
+        exit 0
+        ;;
+    f)
+        fileName=$OPTARG
+        getConfiguredClient || exit 1
+        checkInternet || exit 1
+        main || exit 1
+        exit 0
+    ;;
+    :)  echo "Option -$OPTARG requires an argument." >&2
         exit 1
         ;;
   esac
 done
 
-checkInternet || exit 1
-if [[ $dFlag == "1" ]]; then
-  checkCiphers $3 || exit 1 # if dflag is present input will look like siteciphers -d 0.5 github.com making the website the third arg
-else
-  checkCiphers $1 || exit 1
+
+
+
+# special set of first arguments that have a specific behavior across tools
+if [[ $# == "0" ]]; then
+  getConfiguredClient || exit 1
+  checkInternet || exit 1
+  if [[ $fileName == "" ]]; then
+    fileName="meme"
+  fi
+  main || exit 1
+  exit 0
+elif [[ $# == "1" ]]; then
+  if [[ $1 == "update" ]]; then
+    getConfiguredClient || exit 1
+    checkInternet || exit 1
+    update || exit 1
+    exit 0
+  elif [[ $1 == "help" ]]; then
+    usage
+    exit 0
+  fi
 fi

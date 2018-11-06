@@ -1,34 +1,38 @@
 #!/usr/bin/env bash
-# Author: Jonas-Taha El Sesiy https://github.com/elsesiy
+# Original Author: Jonas-Taha El Sesiy https://github.com/elsesiy
+# Modifications: Alexander Epstein
 
-base=""
-exchangeTo=""
-currentVersion="1.15.2"
-configuredClient=""
+unset base
+unset exchangeTo
+old="false"
+currentVersion="1.22.1"
+unset configuredClient
 
 ## This function determines which http get tool the system has installed and returns an error if there isnt one
 getConfiguredClient()
 {
-    if command -v curl &>/dev/null; then
-      configuredClient="curl"
-    elif command -v wget &>/dev/null; then
-      configuredClient="wget"
-    elif command -v fetch &>/dev/null; then
-      configuredClient="fetch"
-    else
-      echo "Error: This tool reqires either curl, wget, or fetch to be installed."
-      return 1
-    fi
-
+  if  command -v curl &>/dev/null; then
+    configuredClient="curl"
+  elif command -v wget &>/dev/null; then
+    configuredClient="wget"
+  elif command -v http &>/dev/null; then
+    configuredClient="httpie"
+  elif command -v fetch &>/dev/null; then
+    configuredClient="fetch"
+  else
+    echo "Error: This tool reqires either curl, wget, httpie or fetch to be installed." >&2
+    return 1
+  fi
 }
 
 ## Allows to call the users configured client without if statements everywhere
 httpGet()
 {
   case "$configuredClient" in
-    curl) curl -A curl -s -N "$@" ;;
-    wget) wget -qO- "$@" ;;
-    fetch) fetch -o "..." ;;
+    curl)  curl -A curl -s "$@" ;;
+    wget)  wget -qO- "$@" ;;
+    httpie) http -b GET "$@" ;;
+    fetch) fetch -q "$@" ;;
   esac
 }
 
@@ -38,7 +42,7 @@ checkValidCurrency()
   if [[ $1 != "BTC" && $1 != "ETH" \
       && $1 != "XRP" && $1 != "LTC" && $1 != "XEM" \
       && $1 != "ETC" && $1 != "DASH" && $1 != "MIOTA" \
-      && $1 != "XMR" && $1 != "STRAT" ]]; then
+      && $1 != "XMR" && $1 != "STRAT" && $1 != "BCH" ]]; then
     echo "1"
   else
     echo "0"
@@ -55,7 +59,7 @@ checkTargetCurrency()
     echo "1"
   else
     echo "0"
-  fi  
+  fi
 }
 
 ## Grabs the base currency from the user and validates it with all the possible currency
@@ -88,7 +92,7 @@ checkBase()
 # Matches the symbol to the appropriate ids regarding the API calling.
 transformBase()
 {
-  case "$base" in 
+  case "$base" in
     "ETH") reqId="ethereum" ;;
     "BTC") reqId="bitcoin" ;;
     "XRP") reqId="ripple" ;;
@@ -99,6 +103,7 @@ transformBase()
     "MIOTA") reqId="iota" ;;
     "XMR") reqId="monero" ;;
     "STRAT") reqId="stratis" ;;
+    "BCH") reqId="bitcoin-cash" ;;
   esac
 }
 
@@ -156,7 +161,7 @@ checkAmount()
 
 checkInternet()
 {
-  httpGet google.com > /dev/null 2>&1 || { echo "Error: no active internet connection" >&2; return 1; } # query google with a get request
+  httpGet github.com > /dev/null 2>&1 || { echo "Error: no active internet connection" >&2; return 1; } # query github with a get request
 }
 
 ## Grabs the exchange rate and does the math for converting the currency
@@ -164,13 +169,20 @@ convertCurrency()
 {
   exchangeTo=$(echo "$exchangeTo" | tr '[:upper:]' '[:lower:]')
   exchangeRate=$(httpGet "https://api.coinmarketcap.com/v1/ticker/$reqId/?convert=$exchangeTo" | grep -Eo "\"price_$exchangeTo\": \"[0-9 .]*" | sed s/"\"price_$exchangeTo\": \""//g) > /dev/null
-  exchangeAmount=$(echo "$exchangeRate * $amount" | bc  )
+  if ! command -v bc &>/dev/null; then
+    oldRate=$exchangeRate
+    exchangeRate=$(echo $exchangeRate | grep -Eo "^[0-9]*" )
+    amount=$(echo $amount | grep -Eo "^[0-9]*" )
+    exchangeAmount=$(( $exchangeRate * $amount ))
+    exchangeRate=$oldRate
+  else
+    exchangeAmount=$( echo "$exchangeRate * $amount" | bc )
+  fi
   exchangeTo=$(echo "$exchangeTo" | tr '[:lower:]' '[:upper:]')
-  base=$(echo "$base" | tr '[:lower:]' '[:upper:]')
-  
+
   cat <<EOF
 =========================
-| $base to $exchangeTo  
+| $base to $exchangeTo
 | Rate: $exchangeRate
 | $base: $amount
 | $exchangeTo: $exchangeAmount
@@ -181,8 +193,8 @@ EOF
 update()
 {
   # Author: Alexander Epstein https://github.com/alexanderepstein
-  # Update utility version 1.2.0
-  # To test the tool enter in the default values that are in the examples for each variable
+  # Update utility version 2.2.0
+  # To test the tool enter in the defualt values that are in the examples for each variable
   repositoryName="Bash-Snippets" #Name of repostiory to be updated ex. Sandman-Lite
   githubUserName="alexanderepstein" #username that hosts the repostiory ex. alexanderepstein
   nameOfInstallFile="install.sh" # change this if the installer file has a different name be sure to include file extension if there is one
@@ -200,10 +212,14 @@ update()
       echo -n "Do you wish to update $repositoryName [Y/n]: "
       read -r answer
       if [[ "$answer" == [Yy] ]]; then
-        cd  ~ || { echo 'Update Failed'; exit 1; }
+        cd ~ || { echo 'Update Failed'; exit 1; }
         if [[ -d  ~/$repositoryName ]]; then rm -r -f $repositoryName || { echo "Permissions Error: try running the update as sudo"; exit 1; } ; fi
-        git clone "https://github.com/$githubUserName/$repositoryName" || { echo "Couldn't download latest version"; exit 1; }
-        cd $repositoryName || { echo 'Update Failed' ; exit 1 ;}
+        echo -n "Downloading latest version of: $repositoryName."
+        git clone -q "https://github.com/$githubUserName/$repositoryName" && touch .BSnippetsHiddenFile || { echo "Failure!"; exit 1; } &
+        while [ ! -f .BSnippetsHiddenFile ]; do { echo -n "."; sleep 2; };done
+        rm -f .BSnippetsHiddenFile
+        echo "Success!"
+        cd $repositoryName || { echo 'Update Failed'; exit 1; }
         git checkout "v$latestVersion" 2> /dev/null || git checkout "$latestVersion" 2> /dev/null || echo "Couldn't git checkout to stable release, updating to latest commit."
         chmod a+x install.sh #this might be necessary in your case but wasnt in mine.
         ./$nameOfInstallFile "update" || exit 1
@@ -224,49 +240,42 @@ usage()
 CryptoCurrency
 
 Description: A realtime cryptocurrency converter.
-With no flags it will guide you through the cryptocurrency exchange
+With no flags it will pull down the latest stats of the top 10 cryptos
 
-Usage: cryptocurrency or cryptocurrency [flag] or cryptocurrency [base] [exchangeTo] [amount]
+Usage: cryptocurrency or cryptocurrency [flag] or cryptocurrency [flag] [arg]
+   -o Utilize the old functionality of the tool
+   -f Fiat currency for conversions
    -u Update Bash-Snippet Tools
    -h Show the help
    -v Get the tool version
-
-Supported Base Currencies:
- ___________________________
-| BTC | ETH | XRP  | LTC   |
-| XEM | ETC | DASH | MIOTA |
-| XMR | STRAT              |
- ___________________________
-
-Supported Target Currencies:
- ________________________
-| AUD | BRL | CAD | CHF |
-| CNY | EUR | GBP | HKD |
-| IDR | INR | JPY | KRW |
-| MXN | RUB | USD       |
- _______________________ 
-
-Examples:
-  cryptocurrency BTC USD 12.35
-  cryptocurrency
 EOF
 }
 
-getConfiguredClient || exit 1
-checkInternet || exit 1 # check if we have a valid internet connection if this isnt true the rest of the script will not work so stop here
 
-while getopts "uvh" opt; do
+
+
+while getopts "c:of:uvh" opt; do
   case "$opt" in
     \?) echo "Invalid option: -$OPTARG" >&2
         exit 1
         ;;
+    c)
+        currency=$OPTARG
+        ;;
     h)  usage
         exit 0
+        ;;
+    f)
+        fiat=$OPTARG
+        ;;
+    o)
+        old="true"
         ;;
     v)  echo "Version $currentVersion"
         exit 0
         ;;
-    u)  update
+    u)  checkInternet || exit 1 # check if we have a valid internet connection if this isnt true the rest of the script will not work so stop here
+        update
         exit 0
         ;;
     :)  echo "Option -$OPTARG requires an argument." >&2
@@ -275,32 +284,37 @@ while getopts "uvh" opt; do
   esac
 done
 
-if [[ $# == 0 ]]; then
-  getBase # get base currency
-  getExchangeTo # get exchange to currency
-  getAmount # get the amount to be converted
-  transformBase
-  convertCurrency # grab the exhange rate and perform the conversion
+if $old;then
+getConfiguredClient || exit 1
+getBase # get base currency
+getExchangeTo # get exchange to currency
+getAmount # get the amount to be converted
+transformBase
+convertCurrency # grab the exhange rate and perform the conversion
+exit 0
+fi
+
+
+
+if [[ $1 == "update" ]]; then
+  getConfiguredClient || exit 1
+  checkInternet || exit 1 # check if we have a valid internet connection if this isnt true the rest of the script will not work so stop here
+  update
   exit 0
-elif [[ $# == "1" ]]; then
-  if [[ $1 == "update" ]]; then
-    update
-  elif [[ $1 == "help" ]]; then
-    usage
-  else
-    echo "Not a valid argument"
-    usage
-    exit 1
-  fi
-elif [[ $# == "2" ]]; then
-  echo "Not a valid argument"
+elif [[ $1 == "help" ]]; then
   usage
-  exit 1
-elif [[ $# == "3" ]]; then
-  checkBase $1
-  checkExchangeTo $2
-  checkAmount $3
-  transformBase
-  convertCurrency
   exit 0
 fi
+
+getConfiguredClient || exit 1
+checkInternet || exit 1
+link="rate.sx"
+if [[ $fiat =~ [a-zA-Z] ]]; then
+  link="$fiat.$link"
+fi
+
+if [[ $currency =~ [a-zA-Z] ]]; then
+  link="$link/$currency"
+fi
+
+httpGet $link

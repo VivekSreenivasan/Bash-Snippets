@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Author: Alexander Epstein https://github.com/alexanderepstein
-currentVersion="1.15.2"
-declare -a tools=(currency cryptocurrency stocks weather crypt movies taste short geo cheat ytview cloudup qrify siteciphers todo)
+currentVersion="1.22.1"
+declare -a tools=(bash-snippets cheat cloudup crypt cryptocurrency currency geo lyrics meme movies newton pwned qrify short siteciphers stocks taste todo transfer weather ytview)
 declare -a extraLinuxTools=(maps)
 declare -a extraDarwinTools
 usedGithubInstallMethod="0"
@@ -9,8 +9,9 @@ prefix="/usr/local"
 
 askInstall()
 {
-  echo -n "Do you wish to install $1 [Y/n]: "
-  read -r answer
+  read -p "Do you wish to install $1 [Y/n]: " answer
+  answer=${answer:-Y}
+
   if [[ "$answer" == [Yy] ]]; then
     cd $1 || return 1
     echo -n "Installing $1: "
@@ -63,22 +64,25 @@ singleInstall()
 
 copyManpage()
 {
-  if [[ "$(uname)" == "Darwin" ]]; then
-    manPath="$prefix/share/man/man1"
-  else
-    manPath="/usr/local/man/man1"
-  fi
+  manPath="$prefix/share/man/man1"
+  if [ -f "$prefix/man/man1/bash-snippets.1" ]; then rm -f "$prefix/man/man1/bash-snippets.1"; fi
   cp bash-snippets.1 $manPath 2>&1 || { echo "Failure"; echo "Error copying file, try running install script as sudo"; exit 1; }
 }
 
 response=$( echo "$@" | grep -Eo "\-\-prefix")
 
 if [[ $response == "--prefix" ]]; then
-  prefix=$(echo -n "$@" | sed -e 's/--prefix=\(.*\) .*/\1/')
+  prefix=$(echo -n "$@" | sed -e 's/--prefix=\(.*\) .*/\1/' | cut -d " " -f 1)
   mkdir -p $prefix/bin $prefix/share/man/man1
-  for tool in "${tools[@]}"; do
-    singleInstall $tool || exit 1
-  done
+  if [[ $2 == "all" ]];then
+    for tool in "${tools[@]}"; do
+      singleInstall $tool || exit 1
+    done
+  else
+    for tool in "${@:2}"; do
+      singleInstall $tool || exit 1
+    done
+  fi
   copyManpage || exit 1
 elif [[ $# == 0 ]]; then
   for tool in "${tools[@]}"; do
@@ -104,7 +108,7 @@ elif [[ $1 == "update" ]]; then
     copyManpage || exit 1
   else
     echo "It appears you have installed bash-snippets through a package manager, you must update it with the respective package manager."
-    exit 0
+    exit 1
   fi
 elif [[ $1 == "all" ]]; then
   for tool in "${tools[@]}"; do

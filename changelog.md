@@ -2,6 +2,194 @@
 
 # Bash-Snippets Changelog
 
+## Version 1.22.1
+</div>
+
+## Changes
+* Fix bugs in currency tool because of api changes
+* Fix bugs in cloudup tool because of api changes
+* Fixing movies tool
+* Fix bugs in meme tool
+* Fix default answer on install
+
+<div align="center">
+
+## Version 1.22.0
+
+</div>
+
+## Changes
+* Adding bash-snippets gui component
+* Fixing bug in url shortener
+* Fixing old functionality cryptocurrency
+
+
+
+<div align="center">
+
+## Version 1.21.0
+
+</div>
+
+## Changes
+* Fixing the exchange name for the stocks tool
+* Adding the memes component
+* Fixing locale error
+* Added pwned component
+* Adding one time file transfer to transfer component
+* Changing how cryptocurrency tool works now using rate.sx
+
+
+
+<div align="center">
+
+## Version 1.20.0
+
+</div>
+
+## Changes
+* Brought back lyrics tool
+* Added shorten url functionality to short
+* Fixed the stocks api
+* Save QRCodes to an image file
+* Fixed bug in qrify for single-word strings
+* Adding mdfind functionality to ytview
+
+
+<div align="center">
+
+## Version 1.19.2
+
+</div>
+
+## Changes
+* ytview for macOS can now use mpv
+* lyrics tool was removed, api is not available anymore
+
+
+
+<div align="center">
+
+## Version 1.19.1
+
+</div>
+
+## Changes
+* Fixed bug in todo for task lists over 8 tasks
+* Fixing the endpoint in the short tool
+
+<div align="center">
+
+## Version 1.19.0
+
+</div>
+
+### Changes
+* Adding BCH to cryptocurrencies tool
+* Adding lyrics component
+
+<div align="center">
+
+## Version 1.18.1
+
+</div>
+
+### Changes
+* Changed how transfer uploads files
+* Upload multiple files with transfer
+* Get tasks after removal of tasks in todo
+* Bulk removal of tasks in todo
+* Removing bad echo from cloudup
+
+<div align="center">
+
+## Version 1.18.0
+
+</div>
+
+### Changes
+* Added transfer component
+* Fixing fetch call across all tools
+* Changing progress echos for update
+* Run checkInternet only when needed (speeds up processes that don't need it)
+* Hiding the api help page in weather
+
+<div align="center">
+
+## Version 1.17.3
+
+</div>
+
+### Changes
+* checkInternet now checks github.com over google.com
+* tools that don't need bc don't use it
+* tools that need bc can approximate without it
+* Fixing trailing quotation mark for newton on osx
+* Adding all option to uninstall
+
+
+<div align="center">
+
+## Version 1.17.2
+
+</div>
+
+### Changes
+* Fixing where manpage is installed for linuxbrew
+* Updating weather usage and manpage
+
+<div align="center">
+
+## Version 1.17.1
+
+</div>
+
+### Bugfixes
+* Fixing grabbing the prefix in homebrew install
+
+<div align="center">
+
+## Version 1.17.0
+
+</div>
+
+### Changes
+* Adding ability to use m/s for windspeed in weather
+* Supporting httpie for all tools that work with it
+* Install for homebrew can now handle multiple tools on one line
+
+<div align="center">
+
+## Version 1.16.2
+
+</div>
+
+### Changes
+* Adding back all argument to homebrew install
+
+<div align="center">
+
+## Version 1.16.1
+
+</div>
+
+### Changes
+* Changed install script for homebrew
+* Added the -r option to newton
+
+<div align="center">
+
+## Version 1.16.0
+
+</div>
+
+### Changes
+* Added cryptocurrency component
+* Added newton component
+* Changed WAN Call in geo
+
+<div align="center">
+
 ## Version 1.15.2
 
 </div>

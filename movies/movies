@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Author: Alexander Epstein https://github.com/alexanderepstein
 
-currentVersion="1.15.2"
+currentVersion="1.22.1"
 configuredClient=""
 configuredPython=""
 detail=false
@@ -9,16 +9,29 @@ detail=false
 ## This function determines which http get tool the system has installed and returns an error if there isnt one
 getConfiguredClient()
 {
-    if  command -v curl &>/dev/null ; then
-      configuredClient="curl"
-    elif command -v wget &>/dev/null ; then
-      configuredClient="wget"
-    elif command -v fetch &>/dev/null ; then
-      configuredClient="fetch"
-    else
-      echo "Error: This tool reqires either curl, wget, or fetch to be installed."
-      return 1
-    fi
+  if  command -v curl &>/dev/null; then
+    configuredClient="curl"
+  elif command -v wget &>/dev/null; then
+    configuredClient="wget"
+  elif command -v http &>/dev/null; then
+    configuredClient="httpie"
+  elif command -v fetch &>/dev/null; then
+    configuredClient="fetch"
+  else
+    echo "Error: This tool reqires either curl, wget, httpie or fetch to be installed." >&2
+    return 1
+  fi
+}
+
+## Allows to call the users configured client without if statements everywhere
+httpGet()
+{
+  case "$configuredClient" in
+    curl)  curl -A curl -s "$@" ;;
+    wget)  wget -qO- "$@" ;;
+    httpie) http -b GET "$@" ;;
+    fetch) fetch -q "$@" ;;
+  esac
 }
 
 getConfiguredPython()
@@ -43,20 +56,9 @@ if [[ $(uname) != "Darwin" ]]; then
   }
 fi
 
-## Allows to call the users configured client without if statements everywhere
-httpGet()
-{
-  case "$configuredClient" in
-    curl) curl -A curl -s "$@" ;;
-    wget) wget -qO- "$@" ;;
-    fetch) fetch -o "..." ;;
-  esac
-}
-
-
 checkInternet()
 {
-  httpGet google.com > /dev/null 2>&1 || { echo "Error: no active internet connection" >&2; return 1; } # query google with a get request
+  httpGet github.com > /dev/null 2>&1 || { echo "Error: no active internet connection" >&2; return 1; } # query github with a get request
 }
 
 ## This function grabs information about a movie and using python parses the
@@ -75,15 +77,18 @@ getMovieInfo()
   runtime=$(echo $movieInfo | python -c "import sys, json; print json.load(sys.stdin)['Runtime']" 2> /dev/null)
   imdbScore=$(echo $movieInfo | python -c "import sys, json; print json.load(sys.stdin)['Ratings'][0]['Value']" 2> /dev/null)
   tomatoScore=$(echo $movieInfo | python -c "import sys, json; print json.load(sys.stdin)['Ratings'][1]['Value']" 2> /dev/null)
-  metacriticScore=$(echo $movieInfo | python -c "import sys, json; print json.load(sys.stdin)['Ratings'][2]['Value']" 2> /dev/null)
   rated=$(echo $movieInfo | python -c "import sys, json; print json.load(sys.stdin)['Rated']" 2> /dev/null)
   genre=$(echo $movieInfo | python -c "import sys, json; print json.load(sys.stdin)['Genre']" 2> /dev/null)
   director=$(echo $movieInfo | python -c "import sys, json; print json.load(sys.stdin)['Director']" 2> /dev/null)
-  production=$(echo $movieInfo | python -c "import sys, json; print json.load(sys.stdin)['Production']" 2> /dev/null)
-  boxOffice=$(echo $movieInfo | python -c "import sys, json; print json.load(sys.stdin)['BoxOffice']" 2> /dev/null)
   actors=$(echo $movieInfo | python -c "import sys, json; print json.load(sys.stdin)['Actors']" 2> /dev/null)
   plot=$(echo $movieInfo | python -c "import sys, json; print json.load(sys.stdin)['Plot']" 2> /dev/null)
-  awards=$(echo $movieInfo | python -c "import sys, json; print json.load(sys.stdin)['Awards']" 2> /dev/null)
+  
+  if $detail; then
+    awards=$(echo $movieInfo | python -c "import sys, json; print json.load(sys.stdin)['Awards']" 2> /dev/null)
+    boxOffice=$(echo $movieInfo | python -c "import sys, json; print json.load(sys.stdin)['BoxOffice']" 2> /dev/null)
+    metacriticScore=$(echo $movieInfo | python -c "import sys, json; print json.load(sys.stdin)['Ratings'][2]['Value']" 2> /dev/null)
+    production=$(echo $movieInfo | python -c "import sys, json; print json.load(sys.stdin)['Production']" 2> /dev/null)
+  fi
 }
 
 # Prints the movie information out in a human readable format
@@ -116,7 +121,7 @@ printMovieInfo()
 update()
 {
   # Author: Alexander Epstein https://github.com/alexanderepstein
-  # Update utility version 1.2.0
+  # Update utility version 2.2.0
   # To test the tool enter in the defualt values that are in the examples for each variable
   repositoryName="Bash-Snippets" #Name of repostiory to be updated ex. Sandman-Lite
   githubUserName="alexanderepstein" #username that hosts the repostiory ex. alexanderepstein
@@ -126,7 +131,7 @@ update()
   if [[ $currentVersion == "" || $repositoryName == "" || $githubUserName == "" || $nameOfInstallFile == "" ]]; then
     echo "Error: update utility has not been configured correctly." >&2
     exit 1
-  elif [[ $latestVersion == "" ]];then
+  elif [[ $latestVersion == "" ]]; then
     echo "Error: no active internet connection" >&2
     exit 1
   else
@@ -135,10 +140,14 @@ update()
       echo -n "Do you wish to update $repositoryName [Y/n]: "
       read -r answer
       if [[ "$answer" == [Yy] ]]; then
-        cd  ~ || { echo 'Update Failed' ; exit 1; }
+        cd ~ || { echo 'Update Failed'; exit 1; }
         if [[ -d  ~/$repositoryName ]]; then rm -r -f $repositoryName || { echo "Permissions Error: try running the update as sudo"; exit 1; } ; fi
-        git clone "https://github.com/$githubUserName/$repositoryName" || { echo "Couldn't download latest version" ; exit 1; }
-        cd $repositoryName ||  { echo 'Update Failed' ; exit 1; }
+        echo -n "Downloading latest version of: $repositoryName."
+        git clone -q "https://github.com/$githubUserName/$repositoryName" && touch .BSnippetsHiddenFile || { echo "Failure!"; exit 1; } &
+        while [ ! -f .BSnippetsHiddenFile ]; do { echo -n "."; sleep 2; };done
+        rm -f .BSnippetsHiddenFile
+        echo "Success!"
+        cd $repositoryName || { echo 'Update Failed'; exit 1; }
         git checkout "v$latestVersion" 2> /dev/null || git checkout "$latestVersion" 2> /dev/null || echo "Couldn't git checkout to stable release, updating to latest commit."
         chmod a+x install.sh #this might be necessary in your case but wasnt in mine.
         ./$nameOfInstallFile "update" || exit 1
@@ -151,7 +160,6 @@ update()
       echo "$repositoryName is already the latest version"
     fi
   fi
-
 }
 
 usage()
@@ -172,11 +180,12 @@ EOF
 
 if [[ $(uname) != "Darwin" ]]; then getConfiguredPython || exit 1; fi
 getConfiguredClient || exit 1
-checkInternet || exit 1 # check if we have a valid internet connection if this isnt true the rest of the script will not work so stop here
+
 
 while getopts 'ud:hv' flag; do
   case "${flag}" in
-    u) update
+    u) checkInternet || exit 1 # check if we have a valid internet connection if this isnt true the rest of the script will not work so stop here
+      update
        exit 0 ;;
     d) detail=true ;;
     h) usage
@@ -192,10 +201,12 @@ done
 if [[ $# == 0 ]]; then
   usage
 elif [[ $1 == "update" ]]; then
+  checkInternet || exit 1 # check if we have a valid internet connection if this isnt true the rest of the script will not work so stop here
   update
 elif [[ $1 == "help" ]]; then
   usage
 else
+  checkInternet || exit 1 # check if we have a valid internet connection if this isnt true the rest of the script will not work so stop here
   getMovieInfo "$@" || exit 1 ## exit if we return 1 (chances are movie was not found)
   printMovieInfo ## print out the data
 fi

@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Author: Alexander Epstein https://github.com/alexanderepstein
 
-currentVersion="1.15.2"
+currentVersion="1.22.1"
 configuredClient=""
 ## rest of these variables are search flags
 search="0"
@@ -16,10 +16,12 @@ getConfiguredClient()
     configuredClient="curl"
   elif command -v wget &>/dev/null; then
     configuredClient="wget"
+  elif command -v http &>/dev/null; then
+    configuredClient="httpie"
   elif command -v fetch &>/dev/null; then
     configuredClient="fetch"
   else
-    echo "Error: This tool reqires either curl, wget, or fetch to be installed."
+    echo "Error: This tool reqires either curl, wget, httpie or fetch to be installed." >&2
     return 1
   fi
 }
@@ -30,20 +32,21 @@ httpGet()
   case "$configuredClient" in
     curl)  curl -A curl -s "$@" ;;
     wget)  wget -qO- "$@" ;;
-    fetch) fetch -o "..." ;;
+    httpie) http -b GET "$@" ;;
+    fetch) fetch -q "$@" ;;
   esac
 }
 
 
 checkInternet()
 {
-  httpGet google.com > /dev/null 2>&1 || { echo "Error: no active internet connection" >&2; return 1; } # query google with a get request
+  httpGet github.com > /dev/null 2>&1 || { echo "Error: no active internet connection" >&2; return 1; } # query github with a get request
 }
 
 update()
 {
   # Author: Alexander Epstein https://github.com/alexanderepstein
-  # Update utility version 1.2.0
+  # Update utility version 2.2.0
   # To test the tool enter in the defualt values that are in the examples for each variable
   repositoryName="Bash-Snippets" #Name of repostiory to be updated ex. Sandman-Lite
   githubUserName="alexanderepstein" #username that hosts the repostiory ex. alexanderepstein
@@ -62,15 +65,19 @@ update()
       echo -n "Do you wish to update $repositoryName [Y/n]: "
       read -r answer
       if [[ "$answer" == [Yy] ]]; then
-        cd  ~ || { echo 'Update Failed'; exit 1; }
+        cd ~ || { echo 'Update Failed'; exit 1; }
         if [[ -d  ~/$repositoryName ]]; then rm -r -f $repositoryName || { echo "Permissions Error: try running the update as sudo"; exit 1; } ; fi
-        git clone "https://github.com/$githubUserName/$repositoryName" || { echo "Couldn't download latest version" ; exit 1; }
+        echo -n "Downloading latest version of: $repositoryName."
+        git clone -q "https://github.com/$githubUserName/$repositoryName" && touch .BSnippetsHiddenFile || { echo "Failure!"; exit 1; } &
+        while [ ! -f .BSnippetsHiddenFile ]; do { echo -n "."; sleep 2; };done
+        rm -f .BSnippetsHiddenFile
+        echo "Success!"
         cd $repositoryName || { echo 'Update Failed'; exit 1; }
         git checkout "v$latestVersion" 2> /dev/null || git checkout "$latestVersion" 2> /dev/null || echo "Couldn't git checkout to stable release, updating to latest commit."
         chmod a+x install.sh #this might be necessary in your case but wasnt in mine.
         ./$nameOfInstallFile "update" || exit 1
         cd ..
-        rm -r -f $repositoryName ||  { echo "Permissions Error: update succesfull but cannot delete temp files located at ~/$repositoryName delete this directory with sudo"; exit 1; }
+        rm -r -f $repositoryName || { echo "Permissions Error: update succesfull but cannot delete temp files located at ~/$repositoryName delete this directory with sudo"; exit 1; }
       else
         exit 1
       fi
@@ -78,7 +85,6 @@ update()
       echo "$repositoryName is already the latest version"
     fi
   fi
-
 }
 
 usage()
@@ -153,7 +159,7 @@ checkSpecialPage()
 }
 
 getConfiguredClient || exit 1
-checkInternet || exit 1
+
 
 while getopts "ribuvhis" opt; do
   case "$opt" in
@@ -166,7 +172,9 @@ while getopts "ribuvhis" opt; do
     v)  echo "Version $currentVersion"
         exit 0
         ;;
-    u)  update
+    u)
+        checkInternet || exit 1
+        update
         exit 0
         ;;
     i)  insensitive="i"
@@ -206,12 +214,14 @@ if [[ $# == 0 ]]; then
   usage
   exit 0
 elif [[ $1 == "update" ]]; then
+  checkInternet || exit 1
   update
   exit 0
 elif [[ $1 == "help" || $1 == ":help" ]]; then ## shows the help and prevents the user from seeing cheat.sh/:help
   usage
   exit 0
 else
+  checkInternet || exit 1
   if [[ $arg1 != $arg2 ]]; then ## if they equal each other that means there was no arg 2 supplied
     getCheatSheet $arg1 $arg2
     exit 0

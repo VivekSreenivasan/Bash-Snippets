@@ -1,48 +1,49 @@
 #!/usr/bin/env bash
 # Author: Alexander Epstein https://github.com/alexanderepstein
 
-base=""
-exchangeTo=""
-currentVersion="1.15.2"
-configuredClient=""
+unset base
+unset exchangeTo
+currentVersion="1.22.1"
+unset configuredClient
+currencyCodes=(AUD BGN BRL CAD CHF CNY CZK DKK
+  EUR GBP HKD HRK HUF IDR ILS INR
+  JPY KRW MXN MYR NOK NZD PHP PLN
+  RON RUB SEK SGD THB TRY USD ZAR)
 
-## This function determines which http get tool the system has installed and returns an error if there isnt one
-getConfiguredClient()
-{
-    if  command -v curl &>/dev/null; then
+  ## This function determines which http get tool the system has installed and returns an error if there isnt one
+  getConfiguredClient()
+  {
+    if command -v curl &>/dev/null; then
       configuredClient="curl"
     elif command -v wget &>/dev/null; then
       configuredClient="wget"
+    elif command -v http &>/dev/null; then
+      configuredClient="httpie"
     elif command -v fetch &>/dev/null; then
       configuredClient="fetch"
     else
-      echo "Error: This tool reqires either curl, wget, or fetch to be installed."
+      echo "Error: This tool reqires either curl, wget, httpie or fetch to be installed." >&2
       return 1
     fi
-}
+  }
 
-## Allows to call the users configured client without if statements everywhere
-httpGet()
-{
-  case "$configuredClient" in
-    curl)  curl -A curl -s "$@" ;;
-    wget)  wget -qO- "$@" ;;
-    fetch) fetch -o "..." ;;
-  esac
-}
+  ## Allows to call the users configured client without if statements everywhere
+  httpGet()
+  {
+    case "$configuredClient" in
+      curl)  curl -A curl -s "$@" ;;
+      wget)  wget -qO- "$@" ;;
+      httpie) http -b GET "$@" ;;
+      fetch) fetch -q "$@" ;;
+    esac
+  }
 
 checkValidCurrency()
 {
-  if [[ $1 != "AUD" && $1 != "BGN" && $1 != "BRL" \
-      && $1 != "CAD" && $1 != "CHF" && $1 != "CNY" && $1 != "CZK" && $1 != "DKK" \
-      && $1 != "EUR" && $1 != "GBP" && $1 != "HKD" && $1 != "HRK" && $1 != "HUF" \
-      && $1 != "IDR" && $1 != "ILS" && $1 != "INR" && $1 != "JPY" && $1 != "KRW" \
-      && $1 != "MXN" && $1 != "MYR" && $1 != "NOK" && $1 != "NZD" && $1 != "PHP" \
-      && $1 != "PLN" && $1 != "RON" && $1 != "RUB" && $1 != "SEK" && $1 != "SGD" \
-      && $1 != "THB" && $1 != "TRY" && $1 != "USD" && $1 != "ZAR" ]]; then
-    echo "1"
-  else
+  if [[ "${currencyCodes[*]}" == *"$(echo "${@}" | tr -d '[:space:]')"* ]]; then
     echo "0"
+  else
+    echo "1"
   fi
 }
 
@@ -53,7 +54,7 @@ getBase()
   echo -n "What is the base currency: "
   read -r base
   base=$(echo $base | tr /a-z/ /A-Z/)
-  if [[ $(checkValidCurrency $base) == "1"  ]]; then
+  if [[ $(checkValidCurrency $base) == "1" ]]; then
     unset base
     echo "Invalid base currency"
     getBase
@@ -129,16 +130,24 @@ checkAmount()
 
 checkInternet()
 {
-  httpGet google.com > /dev/null 2>&1 || { echo "Error: no active internet connection" >&2; return 1; } # query google with a get request
+  httpGet github.com > /dev/null 2>&1 || { echo "Error: no active internet connection" >&2; return 1; } # query github with a get request
 }
 
 ## Grabs the exchange rate and does the math for converting the currency
 convertCurrency()
 {
-  exchangeRate=$(httpGet "http://api.fixer.io/latest?base=$base&symbols=$exchangeTo" | grep -Eo "[0-9]*[.][0-9]*") > /dev/null
-  exchangeAmount=$(echo "$exchangeRate * $amount" | bc)
-  cat <<EOF
+  exchangeRate=$(httpGet "https://api.exchangeratesapi.io/latest?base=$base" | grep -Eo "$exchangeTo\":[1-9.]*" | grep -Eo "[0-9.]*") > /dev/null
+  if ! command -v bc &>/dev/null; then
+    oldRate=$exchangeRate
+    exchangeRate=$(echo $exchangeRate | grep -Eo "^[0-9]*" )
+    amount=$(echo $amount | grep -Eo "^[0-9]*" )
+    exchangeAmount=$(( $exchangeRate * $amount ))
+    exchangeRate=$oldRate
+  else
+    exchangeAmount=$( echo "$exchangeRate * $amount" | bc )
+  fi
 
+  cat <<EOF
 =========================
 | $base to $exchangeTo
 | Rate: $exchangeRate
@@ -151,8 +160,8 @@ EOF
 update()
 {
   # Author: Alexander Epstein https://github.com/alexanderepstein
-  # Update utility version 1.2.0
-  # To test the tool enter in the default values that are in the examples for each variable
+  # Update utility version 2.2.0
+  # To test the tool enter in the defualt values that are in the examples for each variable
   repositoryName="Bash-Snippets" #Name of repostiory to be updated ex. Sandman-Lite
   githubUserName="alexanderepstein" #username that hosts the repostiory ex. alexanderepstein
   nameOfInstallFile="install.sh" # change this if the installer file has a different name be sure to include file extension if there is one
@@ -170,10 +179,14 @@ update()
       echo -n "Do you wish to update $repositoryName [Y/n]: "
       read -r answer
       if [[ "$answer" == [Yy] ]]; then
-        cd  ~ || { echo 'Update Failed'; exit 1; }
+        cd ~ || { echo 'Update Failed'; exit 1; }
         if [[ -d  ~/$repositoryName ]]; then rm -r -f $repositoryName || { echo "Permissions Error: try running the update as sudo"; exit 1; } ; fi
-        git clone "https://github.com/$githubUserName/$repositoryName" || { echo "Couldn't download latest version"; exit 1; }
-        cd $repositoryName || { echo 'Update Failed' ; exit 1 ;}
+        echo -n "Downloading latest version of: $repositoryName."
+        git clone -q "https://github.com/$githubUserName/$repositoryName" && touch .BSnippetsHiddenFile || { echo "Failure!"; exit 1; } &
+        while [ ! -f .BSnippetsHiddenFile ]; do { echo -n "."; sleep 2; };done
+        rm -f .BSnippetsHiddenFile
+        echo "Success!"
+        cd $repositoryName || { echo 'Update Failed'; exit 1; }
         git checkout "v$latestVersion" 2> /dev/null || git checkout "$latestVersion" 2> /dev/null || echo "Couldn't git checkout to stable release, updating to latest commit."
         chmod a+x install.sh #this might be necessary in your case but wasnt in mine.
         ./$nameOfInstallFile "update" || exit 1
@@ -217,7 +230,7 @@ EOF
 }
 
 getConfiguredClient || exit 1
-checkInternet || exit 1 # check if we have a valid internet connection if this isnt true the rest of the script will not work so stop here
+
 
 while getopts "uvh" opt; do
   case "$opt" in
@@ -230,7 +243,8 @@ while getopts "uvh" opt; do
     v)  echo "Version $currentVersion"
         exit 0
         ;;
-    u)  update
+    u)  checkInternet || exit 1 # check if we have a valid internet connection if this isnt true the rest of the script will not work so stop here
+        update
         exit 0
         ;;
     :)  echo "Option -$OPTARG requires an argument." >&2
@@ -240,6 +254,7 @@ while getopts "uvh" opt; do
 done
 
 if [[ $# == 0 ]]; then
+  checkInternet || exit 1 # check if we have a valid internet connection if this isnt true the rest of the script will not work so stop here
   getBase # get base currency
   getExchangeTo # get exchange to currency
   getAmount # get the amount to be converted
@@ -260,9 +275,12 @@ elif [[ $# == "2" ]]; then
   usage
   exit 1
 elif [[ $# == "3" ]]; then
+  checkInternet || exit 1 # check if we have a valid internet connection if this isnt true the rest of the script will not work so stop here
   checkBase $1
   checkExchangeTo $2
   checkAmount $3
   convertCurrency
   exit 0
+else
+  echo "Error: too many arguments."
 fi

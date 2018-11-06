@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Author: Alexander Epstein https://github.com/alexanderepstein
 
-currentVersion="1.15.2"
+currentVersion="1.22.1"
 configuredClient=""
 configuredPython=""
 source ~/.bash_profile 2> /dev/null ## allows grabbing enviornment variable
@@ -16,12 +16,25 @@ getConfiguredClient()
     configuredClient="curl"
   elif command -v wget &>/dev/null; then
     configuredClient="wget"
+  elif command -v http &>/dev/null; then
+    configuredClient="httpie"
   elif command -v fetch &>/dev/null; then
     configuredClient="fetch"
   else
-    echo "Error: This tool reqires either curl, wget, or fetch to be installed."
+    echo "Error: This tool reqires either curl, wget, httpie or fetch to be installed." >&2
     return 1
   fi
+}
+
+## Allows to call the users configured client without if statements everywhere
+httpGet()
+{
+  case "$configuredClient" in
+    curl)  curl -A curl -s "$@" ;;
+    wget)  wget -qO- "$@" ;;
+    httpie) http -b GET "$@" ;;
+    fetch) fetch -q "$@" ;;
+  esac
 }
 
 getConfiguredPython()
@@ -46,25 +59,15 @@ if [[ $(uname) != "Darwin" ]]; then
   }
 fi
 
-## Allows to call the users configured client without if statements everywhere
-httpGet()
-{
-  case "$configuredClient" in
-    curl)  curl -A curl -s "$@" ;;
-    wget)  wget -qO- "$@" ;;
-    fetch) fetch -o "..." ;;
-  esac
-}
-
 checkInternet()
 {
-  httpGet google.com > /dev/null 2>&1 || { echo "Error: no active internet connection" >&2; return 1; } # query google with a get request
+  httpGet github.com > /dev/null 2>&1 || { echo "Error: no active internet connection" >&2; return 1; } # query github with a get request
 }
 
 update()
 {
   # Author: Alexander Epstein https://github.com/alexanderepstein
-  # Update utility version 1.2.0
+  # Update utility version 2.2.0
   # To test the tool enter in the defualt values that are in the examples for each variable
   repositoryName="Bash-Snippets" #Name of repostiory to be updated ex. Sandman-Lite
   githubUserName="alexanderepstein" #username that hosts the repostiory ex. alexanderepstein
@@ -84,8 +87,12 @@ update()
       read -r answer
       if [[ "$answer" == [Yy] ]]; then
         cd ~ || { echo 'Update Failed'; exit 1; }
-        if [[ -d  ~/$repositoryName ]]; then rm -r -f $repositoryName || { echo "Permissions Error: try running the update as sudo"; exit 1; }; fi
-        git clone "https://github.com/$githubUserName/$repositoryName" || { echo "Couldn't download latest version" ; exit 1; }
+        if [[ -d  ~/$repositoryName ]]; then rm -r -f $repositoryName || { echo "Permissions Error: try running the update as sudo"; exit 1; } ; fi
+        echo -n "Downloading latest version of: $repositoryName."
+        git clone -q "https://github.com/$githubUserName/$repositoryName" && touch .BSnippetsHiddenFile || { echo "Failure!"; exit 1; } &
+        while [ ! -f .BSnippetsHiddenFile ]; do { echo -n "."; sleep 2; };done
+        rm -f .BSnippetsHiddenFile
+        echo "Success!"
         cd $repositoryName || { echo 'Update Failed'; exit 1; }
         git checkout "v$latestVersion" 2> /dev/null || git checkout "$latestVersion" 2> /dev/null || echo "Couldn't git checkout to stable release, updating to latest commit."
         chmod a+x install.sh #this might be necessary in your case but wasnt in mine.
@@ -181,7 +188,7 @@ printInfo()
 usage()
 {
   cat <<EOF
-Taste"
+Taste
 Description: A recommendation engine that provides 3 similar items based on some input topic.
   Taste also has the ability to provide information on the item of interest.
   Supports: shows, books, music, artists, movies, authors, games
@@ -209,7 +216,7 @@ EOF
 fi
 if [[ $(uname) != "Darwin" ]]; then getConfiguredPython || exit 1; fi
 getConfiguredClient || exit 1
-checkInternet || exit 1
+
 
 while getopts "uvhis" opt; do
   case "$opt" in
@@ -222,7 +229,8 @@ while getopts "uvhis" opt; do
     v)  echo "Version $currentVersion"
         exit 0
         ;;
-    u)  update
+    u)  checkInternet || exit 1
+        update
         exit 0
         ;;
     i)  if [[ $search == "0" ]]; then
@@ -249,10 +257,12 @@ done
 if [[ $# == 0 ]]; then
   usage
 elif [[ $1 == "update" ]]; then
+  checkInternet || exit 1
   update
 elif [[ $1 == "help" ]]; then
   usage
 else
+  checkInternet || exit 1
   if [[ $search == "0" ]]; then
     if [[ $info == "0" ]]; then
       getSimilar "$@" || exit 1 ## exit if we return 1 (chances are movie was not found)
